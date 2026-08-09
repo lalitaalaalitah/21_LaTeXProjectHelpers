@@ -20,8 +20,10 @@ Automates the formatting of LaTeX critical edition text files by inserting and e
 **Key Capabilities:**
 - **Exact Spacing Enforcer:** Normalizes comments to maintain exact 3-commented-line (`%`) boundaries around TeX structural tags and commands.
 - **Idempotent Formatting:** Running the script multiple times produces clean, identical results without accumulating duplicate comment lines.
-- **Dual Numeral Support:** Interactive CLI prompts accept both ASCII (`0-9`) and Devanagari (`०-९`) input.
-- **Batch Processing & Dry-Run:** Supports single file execution, recursive directory formatting, and `--dry-run` previews.
+- **Smart Batch Filtering:** Recursively processes content/body TeX files while automatically skipping non-content macro definitions (`02_macros_*.tex`) and root project driver files (`03_AllTexFiles.tex`).
+- **Secondary Post-Formatter Execution:** Supports executing custom post-formatting commands (e.g. `latexindent -w {file}`) via `-p / --post-command`.
+- **Companion VS Code Extension:** This Python CLI utility is tightly coupled with the official [VS Code & Antigravity IDE Extension](https://github.com/lalitaalaalitah/01_AddCommentedLines) (`latex-vertical-comment-formatter`), sharing the exact same core formatting and smart batch logic.
+
 
 ## Author & Contact
 - **Author:** lalitaalaalitah

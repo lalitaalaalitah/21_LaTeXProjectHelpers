@@ -29,7 +29,7 @@ Description:
 __author__ = "lalitaalaalitah"
 __website__ = "https://www.lalitaalaalitah.com"
 __github__ = "https://github.com/lalitaalaalitah"
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 
 import os
@@ -81,6 +81,32 @@ ENV_BOUNDARY_PATTERN = re.compile(
 STRUCTURAL_CMD_PATTERN = re.compile(
     r"^\s*\\(section|subsection|subsubsection|shlokaH|granthaH)\b", re.IGNORECASE
 )
+
+
+# Patterns for filtering out non-content macro and master project driver files
+MACRO_FILENAME_PATTERN = re.compile(r"(?:^|[/_\-])macros?(?:[/_\-]|\.tex$)|02_macros_|macros\.tex$", re.IGNORECASE)
+PROJECT_FILENAME_PATTERN = re.compile(r"03_AllTexFiles\.tex$|master\.tex$|main\.tex$|_project_launch", re.IGNORECASE)
+
+
+def is_content_tex_file(file_path: Path, content: str) -> bool:
+    """
+    Checks if a .tex file is a valid content/body TeX file.
+    Excludes macro definitions and root project driver files without body content.
+    """
+    filename = file_path.name.lower()
+
+    if MACRO_FILENAME_PATTERN.search(filename) or PROJECT_FILENAME_PATTERN.search(filename):
+        return False
+
+    lines = content.splitlines()
+    for line in lines:
+        if is_target_line(line):
+            return True
+
+    if r"\documentclass" in content or r"\usepackage" in content or r"\newcommand" in content:
+        return False
+
+    return bool(content.strip())
 
 
 def is_target_line(line: str) -> bool:
@@ -195,10 +221,15 @@ def run_post_formatter(file_path: Path, post_cmd: str):
         console.print(f"[error]Failed to execute post-formatter command '{cmd}': {e}[/error]")
 
 
-def process_file(file_path: Path, comment_count: int = 3, dry_run: bool = False, post_cmd: str = None) -> bool:
+def process_file(file_path: Path, comment_count: int = 3, dry_run: bool = False, post_cmd: str = None, check_content_filter: bool = False) -> bool:
     """Processes a single LaTeX file and optionally runs a secondary post-formatter."""
     try:
         content = file_path.read_text(encoding="utf-8")
+
+        if check_content_filter and not is_content_tex_file(file_path, content):
+            console.print(f"[info]Skipping non-content macro/project file:[/info] {file_path.name}")
+            return False
+
         formatted = format_latex_comments(content, comment_count=comment_count)
 
         changed = (content != formatted)
@@ -232,7 +263,7 @@ def run_interactive_menu():
         post_status = f"[success]{post_cmd}[/success]" if post_cmd else "[info]None[/info]"
         menu_md = f"""
 [menu.option][1] Format a Single TeX File[/menu.option]
-[menu.option][2] Format All TeX Files in a Directory[/menu.option]
+[menu.option][2] Format All Content TeX Files in a Directory (Smart Batch)[/menu.option]
 [menu.option][3] Set Secondary Post-Formatter Command (Current: {post_status})[/menu.option]
 [menu.option][4] Dry-Run Preview on a TeX File[/menu.option]
 [menu.option][0] Exit[/menu.option]
@@ -252,7 +283,7 @@ def run_interactive_menu():
             if target_path_str:
                 path = Path(target_path_str).expanduser().resolve()
                 if path.is_file():
-                    process_file(path, comment_count=3, dry_run=False, post_cmd=post_cmd)
+                    process_file(path, comment_count=3, dry_run=False, post_cmd=post_cmd, check_content_filter=False)
                 else:
                     console.print(f"[error]File not found: {path}[/error]")
             Prompt.ask("\nPress Enter to return to menu...")
@@ -266,15 +297,16 @@ def run_interactive_menu():
                     if not tex_files:
                         console.print(f"[warning]No .tex files found in {dir_path}[/warning]")
                     else:
-                        console.print(f"[info]Found {len(tex_files)} .tex files. Formatting...[/info]")
+                        console.print(f"[info]Found {len(tex_files)} .tex files. Smart batch filtering & formatting...[/info]")
                         modified_count = 0
                         for tf in tex_files:
-                            if process_file(tf, comment_count=3, dry_run=False, post_cmd=post_cmd):
+                            if process_file(tf, comment_count=3, dry_run=False, post_cmd=post_cmd, check_content_filter=True):
                                 modified_count += 1
                         console.print(f"[success]Completed! Updated {modified_count}/{len(tex_files)} files.[/success]")
                 else:
                     console.print(f"[error]Directory not found: {dir_path}[/error]")
             Prompt.ask("\nPress Enter to return to menu...")
+
 
         elif choice == "3":
             new_cmd = Prompt.ask("Enter post-formatter CLI command (e.g. 'latexindent -w {file}')", default=post_cmd or "").strip()
@@ -323,9 +355,10 @@ def main(file_path: Path, dir_path: Path, comment_count: int, post_cmd: str, dry
             console.print(f"[info]Found {len(tex_files)} .tex files. Processing...[/info]")
             modified_count = 0
             for tf in tex_files:
-                if process_file(tf, comment_count=comment_count, dry_run=dry_run, post_cmd=post_cmd):
+                if process_file(tf, comment_count=comment_count, dry_run=dry_run, post_cmd=post_cmd, check_content_filter=True):
                     modified_count += 1
             console.print(f"[success]Done! Processed {modified_count}/{len(tex_files)} files.[/success]")
+
 
 
 if __name__ == "__main__":
