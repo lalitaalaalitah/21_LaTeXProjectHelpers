@@ -24,18 +24,18 @@ Description:
     - Environment boundaries: \\begin{...}, \\end{...}
     - Section & Shloka commands: \\section{...}, \\shlokaH{...}
 
-  Preserves indentation and guarantees idempotency (running multiple times produces
-  identical, clean output without accumulating duplicate comment lines).
 """
 
 __author__ = "lalitaalaalitah"
 __website__ = "https://www.lalitaalaalitah.com"
 __github__ = "https://github.com/lalitaalaalitah"
-__version__ = "1.0.0"
+__version__ = "1.1.0"
+
 
 import os
 import re
 import sys
+import subprocess
 import click
 from pathlib import Path
 from rich.console import Console
@@ -96,16 +96,18 @@ def is_target_line(line: str) -> bool:
     )
 
 
-def is_pure_comment_line(line: str) -> bool:
-    """Checks if a line contains ONLY '%' with optional leading whitespace."""
-    return line.strip() == "%"
+def is_blank_or_pure_comment(line: str) -> bool:
+    """Checks if a line is empty/whitespace-only OR contains ONLY '%' with optional leading whitespace."""
+    stripped = line.strip()
+    return stripped == "" or stripped == "%"
 
 
 def format_latex_comments(content: str, comment_count: int = 3) -> str:
     """
     Formats content to ensure exactly `comment_count` commented lines (%)
-    exist before and after every target marker/command.
-    
+    exist before and after every target marker/command, stripping any unwanted
+    blank lines around comment blocks.
+
     Idempotent: repeating formatting yields the exact same clean output.
     """
     lines = content.splitlines()
@@ -124,8 +126,8 @@ def format_latex_comments(content: str, comment_count: int = 3) -> str:
             indent = line[: len(line) - len(line.lstrip())]
             comment_line = f"{indent}%"
 
-            # Remove existing pure comment lines directly before this target in result_lines
-            while result_lines and is_pure_comment_line(result_lines[-1]):
+            # Remove existing pure comment lines and blank lines directly before this target in result_lines
+            while result_lines and is_blank_or_pure_comment(result_lines[-1]):
                 result_lines.pop()
 
             # Insert exactly comment_count comment lines before target
@@ -135,9 +137,9 @@ def format_latex_comments(content: str, comment_count: int = 3) -> str:
             # Insert the target line itself
             result_lines.append(line)
 
-            # Skip any pure comment lines directly following this target in input lines
+            # Skip any pure comment lines or blank lines directly following this target in input lines
             i += 1
-            while i < num_lines and is_pure_comment_line(lines[i]):
+            while i < num_lines and is_blank_or_pure_comment(lines[i]):
                 i += 1
 
             # Insert exactly comment_count comment lines after target
@@ -150,7 +152,6 @@ def format_latex_comments(content: str, comment_count: int = 3) -> str:
             result_lines.append(line)
             i += 1
 
-    # Final cleanup: normalize multiple consecutive blank lines, preserving content
     output = "\n".join(result_lines) + ("\n" if content.endswith("\n") else "")
     return output
 
@@ -168,22 +169,53 @@ def print_banner():
     console.print(Panel(banner_text.strip(), border_style="banner.border", expand=False))
 
 
-def process_file(file_path: Path, comment_count: int = 3, dry_run: bool = False) -> bool:
-    """Processes a single LaTeX file."""
+def run_post_formatter(file_path: Path, post_cmd: str):
+    """Executes a secondary post-formatting CLI command on the target LaTeX file."""
+    if not post_cmd:
+        return
+
+    cmd = post_cmd
+    file_str = str(file_path)
+
+    if "{file}" in cmd:
+        cmd = cmd.replace("{file}", file_str)
+    elif "%f" in cmd:
+        cmd = cmd.replace("%f", file_str)
+    else:
+        cmd = f"{cmd} \"{file_str}\""
+
+    try:
+        console.print(f"[info]Kicking post-formatter:[/info] {cmd}")
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if res.returncode == 0:
+            console.print(f"[success]Post-formatter completed successfully for:[/success] {file_path.name}")
+        else:
+            console.print(f"[warning]Post-formatter returned exit code {res.returncode}: {res.stderr.strip()}[/warning]")
+    except Exception as e:
+        console.print(f"[error]Failed to execute post-formatter command '{cmd}': {e}[/error]")
+
+
+def process_file(file_path: Path, comment_count: int = 3, dry_run: bool = False, post_cmd: str = None) -> bool:
+    """Processes a single LaTeX file and optionally runs a secondary post-formatter."""
     try:
         content = file_path.read_text(encoding="utf-8")
         formatted = format_latex_comments(content, comment_count=comment_count)
 
-        if content == formatted:
-            console.print(f"[info]No changes needed for:[/info] {file_path.name}")
-            return False
+        changed = (content != formatted)
 
-        if dry_run:
-            console.print(f"[warning][DRY RUN] Would update:[/warning] {file_path}")
+        if not changed:
+            console.print(f"[info]No vertical comment changes needed for:[/info] {file_path.name}")
         else:
-            file_path.write_text(formatted, encoding="utf-8")
-            console.print(f"[success]Successfully formatted:[/success] {file_path}")
-        return True
+            if dry_run:
+                console.print(f"[warning][DRY RUN] Would update:[/warning] {file_path}")
+            else:
+                file_path.write_text(formatted, encoding="utf-8")
+                console.print(f"[success]Successfully formatted vertical comments:[/success] {file_path}")
+
+        if post_cmd and not dry_run:
+            run_post_formatter(file_path, post_cmd)
+
+        return changed
 
     except Exception as e:
         console.print(f"[error]Failed to process {file_path}: {e}[/error]")
@@ -192,19 +224,23 @@ def process_file(file_path: Path, comment_count: int = 3, dry_run: bool = False)
 
 def run_interactive_menu():
     """Interactive CLI menu supporting both Roman and Devanagari choices."""
+    post_cmd = None
     while True:
         console.clear()
         print_banner()
 
-        menu_md = """
-[menu.option][1] 📄 Format a Single TeX File[/menu.option]
-[menu.option][2] 📁 Format All TeX Files in a Directory[/menu.option]
-[menu.option][3] 🔍 Dry-Run Preview on a TeX File[/menu.option]
-[menu.option][0] 🚪 Exit[/menu.option]
+        post_status = f"[success]{post_cmd}[/success]" if post_cmd else "[info]None[/info]"
+        menu_md = f"""
+[menu.option][1] Format a Single TeX File[/menu.option]
+[menu.option][2] Format All TeX Files in a Directory[/menu.option]
+[menu.option][3] Set Secondary Post-Formatter Command (Current: {post_status})[/menu.option]
+[menu.option][4] Dry-Run Preview on a TeX File[/menu.option]
+[menu.option][0] Exit[/menu.option]
 """
+
         console.print(Panel(menu_md.strip(), title="Main Menu - Select Option", border_style="cyan"))
 
-        choice_raw = Prompt.ask("Select an option [0/1/2/3]", default="1")
+        choice_raw = Prompt.ask("Select an option [0/1/2/3/4]", default="1")
         choice = normalize_digits(choice_raw)
 
         if choice == "0":
@@ -216,7 +252,7 @@ def run_interactive_menu():
             if target_path_str:
                 path = Path(target_path_str).expanduser().resolve()
                 if path.is_file():
-                    process_file(path, comment_count=3, dry_run=False)
+                    process_file(path, comment_count=3, dry_run=False, post_cmd=post_cmd)
                 else:
                     console.print(f"[error]File not found: {path}[/error]")
             Prompt.ask("\nPress Enter to return to menu...")
@@ -233,7 +269,7 @@ def run_interactive_menu():
                         console.print(f"[info]Found {len(tex_files)} .tex files. Formatting...[/info]")
                         modified_count = 0
                         for tf in tex_files:
-                            if process_file(tf, comment_count=3, dry_run=False):
+                            if process_file(tf, comment_count=3, dry_run=False, post_cmd=post_cmd):
                                 modified_count += 1
                         console.print(f"[success]Completed! Updated {modified_count}/{len(tex_files)} files.[/success]")
                 else:
@@ -241,11 +277,17 @@ def run_interactive_menu():
             Prompt.ask("\nPress Enter to return to menu...")
 
         elif choice == "3":
+            new_cmd = Prompt.ask("Enter post-formatter CLI command (e.g. 'latexindent -w {file}')", default=post_cmd or "").strip()
+            post_cmd = new_cmd if new_cmd else None
+            console.print(f"[success]Post-formatter command set to:[/success] {post_cmd or 'None'}")
+            Prompt.ask("\nPress Enter to return to menu...")
+
+        elif choice == "4":
             target_path_str = Prompt.ask("Enter path to TeX file for dry-run").strip().strip("'\"")
             if target_path_str:
                 path = Path(target_path_str).expanduser().resolve()
                 if path.is_file():
-                    process_file(path, comment_count=3, dry_run=True)
+                    process_file(path, comment_count=3, dry_run=True, post_cmd=post_cmd)
                 else:
                     console.print(f"[error]File not found: {path}[/error]")
             Prompt.ask("\nPress Enter to return to menu...")
@@ -255,10 +297,11 @@ def run_interactive_menu():
 @click.option("-f", "--file", "file_path", type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path), help="Path to a single TeX file.")
 @click.option("-d", "--dir", "dir_path", type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path), help="Directory to process all .tex files recursively.")
 @click.option("-c", "--count", "comment_count", type=int, default=3, help="Number of commented lines (%) to insert before/after target tags (default: 3).")
+@click.option("-p", "--post-command", "post_cmd", type=str, default=None, help="Secondary post-formatter CLI command to execute after vertical comment formatting (e.g. 'latexindent -w {file}').")
 @click.option("--dry-run", is_flag=True, help="Preview changes without modifying files.")
 @click.option("-v", "--version", "show_version", is_flag=True, help="Show version and branding information.")
-def main(file_path: Path, dir_path: Path, comment_count: int, dry_run: bool, show_version: bool):
-    """Formats TeX files to enforce exact vertical commented line (%) spacing around tags and commands."""
+def main(file_path: Path, dir_path: Path, comment_count: int, post_cmd: str, dry_run: bool, show_version: bool):
+    """Formats TeX files to enforce exact vertical commented line (%) spacing around tags and commands, with optional post-formatter execution."""
     if show_version:
         print_banner()
         sys.exit(0)
@@ -270,7 +313,7 @@ def main(file_path: Path, dir_path: Path, comment_count: int, dry_run: bool, sho
     print_banner()
 
     if file_path:
-        process_file(file_path, comment_count=comment_count, dry_run=dry_run)
+        process_file(file_path, comment_count=comment_count, dry_run=dry_run, post_cmd=post_cmd)
 
     if dir_path:
         tex_files = list(dir_path.rglob("*.tex"))
@@ -280,10 +323,11 @@ def main(file_path: Path, dir_path: Path, comment_count: int, dry_run: bool, sho
             console.print(f"[info]Found {len(tex_files)} .tex files. Processing...[/info]")
             modified_count = 0
             for tf in tex_files:
-                if process_file(tf, comment_count=comment_count, dry_run=dry_run):
+                if process_file(tf, comment_count=comment_count, dry_run=dry_run, post_cmd=post_cmd):
                     modified_count += 1
-            console.print(f"[success]Done! Formatted {modified_count}/{len(tex_files)} files.[/success]")
+            console.print(f"[success]Done! Processed {modified_count}/{len(tex_files)} files.[/success]")
 
 
 if __name__ == "__main__":
     main()
+
