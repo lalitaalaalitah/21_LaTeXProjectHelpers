@@ -14,6 +14,15 @@ Universal LaTeX Manuscript Macro, VS Code Snippet, & Keybinding Manager.
 - **Dual-Destination Sync:** Updates both global VS Code User Settings (`~/Library/Application Support/Code/User/`) for Settings Sync and project repository `.vscode/` folders for GitHub backups.
 - **Project-Scoped Keybindings:** Binds `cmd+a cmd+a` to trigger the project snippet when working inside the project directory.
 
+### 2. `latex_vertical_comment_formatter.py`
+Automates the formatting of LaTeX critical edition text files by inserting and enforcing exactly 3 commented lines (`%`) before and after structural markers (`%<*1>%`, `\pstart%`, `\pend%`, `\begin{...}`, `\end{...}`, `\section{...}`).
+
+**Key Capabilities:**
+- **Exact Spacing Enforcer:** Normalizes comments to maintain exact 3-commented-line (`%`) boundaries around TeX structural tags and commands.
+- **Idempotent Formatting:** Running the script multiple times produces clean, identical results without accumulating duplicate comment lines.
+- **Dual Numeral Support:** Interactive CLI prompts accept both ASCII (`0-9`) and Devanagari (`०-९`) input.
+- **Batch Processing & Dry-Run:** Supports single file execution, recursive directory formatting, and `--dry-run` previews.
+
 ## Author & Contact
 - **Author:** lalitaalaalitah
 - **Website:** [https://www.lalitaalaalitah.com](https://www.lalitaalaalitah.com)

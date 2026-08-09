@@ -188,7 +188,7 @@ def generate_editors_latex_block(editors: list[dict]) -> str:
         lines.append(f"\\newcommand{{\\{cmd}}}[1]{{{{#1}} - {desc} Correction.}}%")
     lines.extend([
         "% %",
-        "\\newcommand{\\WrongNCorrect}[2]{{{#2}\\footnote{{{#1}} - इतिमुद्रितपाठः । {{#2}} - इति समीचीनः स्यात् पाठः ।}}",
+        "\\newcommand{\\WrongNCorrect}[2]{{{#2}\\footnote{{{#1}} - इतिमुद्रितपाठः । {{#2}} - इति समीचीनः स्यात् पाठः ।}}}",
         "% %",
         "% [/ReadingSuggestedByEditors]"
     ])

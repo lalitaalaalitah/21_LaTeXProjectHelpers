@@ -115,3 +115,33 @@ In Sanskrit:
   - `\newcommand*{\mssonePageEnd}[1]{\footnoteD{'{#1} अड्यारमातृकायाः प्रथमायाः पुटमत्र समाप्यते ।'}}`
 
 You do **not** need to type the 6th case manually—the manager's built-in Sanskrit grammar engine converts it for you automatically!
+
+---
+
+## 2. `latex_vertical_comment_formatter.py` Guide
+
+### Overview
+This helper enforces standard 3-commented-line (`%`) vertical structure around structural markers (e.g. `%<*1>%`, `\pstart%`, `\pend%`, `\begin{vyAkhyA}`, `\section{...}`).
+
+### Interactive Menu Mode
+Simply launch the script without arguments:
+```bash
+./latex_vertical_comment_formatter.py
+```
+- **Option 1 (`1` or `१`)**: Select a single `.tex` file to format.
+- **Option 2 (`2` or `२`)**: Format all `.tex` files in a directory recursively.
+- **Option 3 (`3` or `३`)**: Dry-run preview without making changes.
+- **Option 0 (`0` or `०`)**: Exit menu.
+
+### Command-Line Arguments
+```bash
+# Format a single file
+./latex_vertical_comment_formatter.py --file path/to/shlokaH_1.tex
+
+# Format all .tex files in a directory recursively
+./latex_vertical_comment_formatter.py --dir path/to/cleaned_tex/
+
+# Preview changes without modifying files
+./latex_vertical_comment_formatter.py --file path/to/shlokaH_1.tex --dry-run
+```
+
